@@ -1,0 +1,3 @@
+[submodule "alfred-ssh-manager"]
+	path = alfred-ssh-manager
+	url = https://github.com/harshalranjhani/alfred-ssh-manager.git
