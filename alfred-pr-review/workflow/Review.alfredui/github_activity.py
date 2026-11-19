@@ -18,6 +18,9 @@ query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
       reviews(last: 30, states: [APPROVED, CHANGES_REQUESTED, DISMISSED]) {
         nodes { author { login } state commit { oid } }
       }
+      reviewMessages: reviews(last: 8, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) {
+        nodes { author { login } bodyText submittedAt url }
+      }
       reviewThreads(first: 50, after: $endCursor) {
         totalCount
         pageInfo { hasNextPage endCursor }
@@ -130,30 +133,52 @@ def link(comment, label):
     return label
 
 
+def recent_comments(pull, threads):
+    items = [("Discussion", comment, "") for comment in pull["comments"]["nodes"]]
+    items.extend(("Review summary", review, "") for review in pull["reviewMessages"]["nodes"]
+                 if (review.get("bodyText") or "").strip())
+    for thread in threads:
+        root = first_comment(thread)
+        if not root:
+            continue
+        state = "Resolved" if thread["isResolved"] else "Outdated" if thread["isOutdated"] else "Open"
+        items.append((f"Inline · {state}", root, thread["path"]))
+        items.extend(("Reply", comment, thread["path"]) for comment in thread["recent"]["nodes"]
+                     if comment["url"] != root["url"])
+
+    ordered = sorted(items, key=lambda item: item[1].get("createdAt") or item[1].get("submittedAt") or "",
+                     reverse=True)
+    lines = []
+    for kind, comment, path in ordered[:10]:
+        byline = link(comment, excerpt(author(comment) or "GitHub"))
+        target = f" · {excerpt(path, 50)}" if path else ""
+        lines.append(f"- **{kind}** · {byline}{target} · {excerpt(comment['bodyText'])}")
+    return lines
+
+
 def summarize(pull, viewer, threads, entries, reviewed_head):
     own = own_threads(threads, viewer)
     resolved = sum(thread["isResolved"] for thread in own)
     outdated = sum(thread["isOutdated"] and not thread["isResolved"] for thread in own)
     opened = len(own) - resolved - outdated
-    replied = sum(any(author(reply) and author(reply).lower() != viewer.lower()
-                      and reply["url"] != first_comment(thread)["url"]
-                      for reply in thread["recent"]["nodes"]) for thread in own)
     head = pull["headRefOid"]
     if reviewed_head and reviewed_head != head:
         lead = f"**New commits since review** · reviewed `{reviewed_head[:8]}` · current `{head[:8]}`"
     else:
         lead = f"**{'Current commit reviewed' if reviewed_head else 'Current commit'}** · `{head[:8]}`"
 
-    parts = [lead, f"**Your inline threads** · {opened} open · {resolved} resolved · {outdated} outdated",
-             f"{len(threads)} inline threads and {pull['comments']['totalCount']} discussion comments on this PR."]
+    replies = sum(max(thread["first"]["totalCount"] - 1, 0) for thread in threads)
+    parts = [lead, f"{len(threads)} inline threads · {replies} replies · {pull['comments']['totalCount']} discussion comments"]
+    feed = recent_comments(pull, threads)
+    if feed:
+        parts.append("#### Recent comments and replies\n" + "\n".join(feed))
+    elif not threads and not pull["comments"]["totalCount"]:
+        parts.append("No inline or discussion comments on this PR.")
+    parts.append(f"**Your inline threads** · {opened} open · {resolved} resolved · {outdated} outdated")
     decision = {"APPROVED": "Approved", "CHANGES_REQUESTED": "Changes requested",
                 "REVIEW_REQUIRED": "Review required"}.get(pull.get("reviewDecision"))
     if decision:
         parts.append(f"GitHub review status · **{decision}**")
-    if not threads and not pull["comments"]["totalCount"]:
-        parts.append("No inline or discussion comments on this PR.")
-    if replied:
-        parts.append(f"Recent replies on {replied} of your threads.")
     entry = latest_reviewed(entries, head)
     count = round_comment_count(own, entry)
     if count == 0:
@@ -164,38 +189,6 @@ def summarize(pull, viewer, threads, entries, reviewed_head):
     if approved(pull, viewer):
         parts.append("**You approved the current commit.**")
 
-    if own:
-        lines = []
-        for thread in sorted(own, key=lambda item: (item["isResolved"], item["isOutdated"],
-                                                   first_comment(item).get("createdAt", "")))[:5]:
-            root = first_comment(thread)
-            state = "Resolved" if thread["isResolved"] else "Outdated" if thread["isOutdated"] else "Open"
-            replies = [comment for comment in thread["recent"]["nodes"]
-                       if comment["url"] != root["url"] and author(comment).lower() != viewer.lower()]
-            line = f"- **{state}** · {link(root, excerpt(thread['path'], 58))} · {excerpt(root['bodyText'])}"
-            if replies:
-                reply = replies[-1]
-                line += f"\n  - {link(reply, excerpt(author(reply) or 'Reply'))} replied · {excerpt(reply['bodyText'], 110)}"
-            lines.append(line)
-        parts.append("#### Your review threads\n" + "\n".join(lines))
-
-    others = [thread for thread in threads if author(first_comment(thread)).lower() != viewer.lower()]
-    if others:
-        lines = []
-        for thread in sorted(others, key=lambda item: first_comment(item).get("createdAt", ""), reverse=True)[:4]:
-            root = first_comment(thread)
-            if root:
-                lines.append(f"- {link(root, excerpt(thread['path'], 58))} · "
-                             f"{excerpt(author(root) or 'GitHub')} · {excerpt(root['bodyText'], 110)}")
-        if lines:
-            parts.append("#### Other inline comments\n" + "\n".join(lines))
-
-    discussion = pull["comments"]["nodes"]
-    if discussion:
-        lines = [f"- {link(comment, excerpt(author(comment) or 'GitHub'))} · "
-                 f"{excerpt(comment['createdAt'][:10])} · {excerpt(comment['bodyText'])}"
-                 for comment in reversed(discussion)]
-        parts.append("#### Recent discussion\n" + "\n".join(lines))
     return "\n\n".join(parts)
 
 

@@ -282,6 +282,6 @@ Review actions can post verified inline comments as you. Configure the GitHub re
 		</dict>
 	</array>
 	<key>version</key>
-	<string>1.3.0</string>
+	<string>1.3.1</string>
 </dict>
 </plist>

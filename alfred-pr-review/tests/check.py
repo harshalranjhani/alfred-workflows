@@ -181,14 +181,18 @@ def check_activity():
 
     def thread(root, replies=(), *, resolved=False, outdated=False):
         return {"path": "example.py", "isResolved": resolved, "isOutdated": outdated,
-                "first": {"nodes": [root]}, "recent": {"nodes": [root, *replies]}}
+                "first": {"nodes": [root], "totalCount": len(replies) + 1},
+                "recent": {"nodes": [root, *replies]}}
 
     threads = [thread(comment(1, viewer, "Return the empty result"), [comment(2, contributor, "Updated this")]),
                thread(comment(3, viewer, "Resolve this"), resolved=True),
                thread(comment(4, viewer, "Old line"), outdated=True),
-               thread(comment(5, contributor, "Another inline comment"))]
+               thread(comment(5, contributor, "Another inline comment"),
+                      [comment(8, viewer, "Reply on another review", "2026-01-02T10:00:00Z")])]
     pull = {"title": "Example change", "state": "OPEN", "headRefOid": head, "viewerDidAuthor": False,
             "reviewDecision": "REVIEW_REQUIRED", "reviews": {"nodes": []},
+            "reviewMessages": {"nodes": [{"url": f"{url}#pullrequestreview-99", "author": contributor,
+                                           "bodyText": "Submitted a review summary", "submittedAt": "2026-01-02T11:00:00Z"}]},
             "comments": {"totalCount": 1, "nodes": [comment(6, contributor, "New tests are ready")]},
             "reviewThreads": {"totalCount": len(threads), "pageInfo": {"hasNextPage": False}, "nodes": []}}
     posts = []
@@ -218,6 +222,8 @@ def check_activity():
         report = fields["findings"]["text"]
         assert "1 open · 1 resolved · 1 outdated" in report and "Updated this" in report
         assert "New tests are ready" in report and "Another inline comment" in report
+        assert "Reply on another review" in report and "Submitted a review summary" in report
+        assert report.index("Submitted a review summary") < report.index("No inline findings posted by you")
         assert "No inline findings posted by you" in report and fields["approve"]["enabled"]
         token = variables["approval_token"]
         assert token == f"reviewer:{head}" and not posts
@@ -241,6 +247,7 @@ def check_activity():
         assert not view("approve", token)[0]["approve"]["enabled"] and len(posts) == 1
         threads.clear()
         pull["comments"] = {"totalCount": 0, "nodes": []}
+        pull["reviewMessages"]["nodes"] = []
         assert "No inline or discussion comments on this PR" in view()[0]["findings"]["text"]
         pull["reviewThreads"]["pageInfo"]["hasNextPage"] = True
         assert "GitHub activity unavailable" in view()[0]["findings"]["text"]

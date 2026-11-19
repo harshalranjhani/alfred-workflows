@@ -331,7 +331,7 @@ def render(pr, record, *, fill=False, error="", selected="", dashboard=False):
         "copy": {"enabled": bool(report)},
         "activity": {"enabled": bool(pr)},
         "reportTab": {"enabled": False},
-        "approve": {"enabled": False},
+        "approve": {"enabled": False, "tooltip": "Open Activity to check whether you can approve this PR"},
         "github": {"enabled": bool(pr)},
     }
     if fill:
@@ -374,8 +374,9 @@ def activity_view(pr, record, selection, approval=None):
         if message:
             markdown += f"\n\n{message}"
         fields["detailTitle"]["text"] = f"PR #{pr} · {pull['title']}"
-        fields["status"]["text"] = f"GitHub activity · @{viewer}"
+        fields["status"]["text"] = reason or f"GitHub activity · @{viewer}"
         fields["approve"]["enabled"] = bool(token)
+        fields["approve"]["tooltip"] = reason or "Approve the checked commit on GitHub"
         view["variables"].update(approval_token=token, approval_short=head[:8], approval_viewer=viewer)
     except (ReviewError, OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
         headline = "Approval could not be confirmed" if approval is not None else "GitHub activity unavailable"

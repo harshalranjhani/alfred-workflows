@@ -18,9 +18,9 @@ Type `prreview` to open the dashboard. To open a specific pull request, type its
 
 Select a round in History to read its findings. Filter by pull request number or title. The dashboard counts pull requests reviewed, completed rounds, and completed re-reviews. Records from older versions include the saved report and latest attempt when available.
 
-Choose Activity to see recent GitHub discussion and inline comments. It shows whether your threads are open, resolved, or outdated and quotes recent replies. The commit indicator shows when new code arrived after the last review. Choose Activity again to refresh.
+Choose Activity to see the ten most recent GitHub comments, replies, and review summaries. The feed includes replies from any reviewer and links to the original comments. It shows whether inline threads are open, resolved, or outdated. The commit indicator shows when new code arrived after the last review. Choose Activity again to refresh.
 
-After a completed review of the current commit, Activity checks for new inline findings from your GitHub account. If it finds none, choose Approve PR and confirm. The workflow checks the account, comments, and commit again before it submits the approval. Choose Report to return to the saved findings.
+After a completed review of the current commit, Activity checks for new inline findings from your GitHub account. If it finds none, choose Approve PR and confirm. The workflow checks the account, comments, and commit again before it submits the approval. If approval is unavailable, read the reason below the activity feed. Choose Report to return to the saved findings.
 
 Press ⌘↩ to review or ⌘⇧↩ to re-review. Press ⌘O to open the thread in T3 Code or ⌘⇧C to copy the displayed findings.
 
