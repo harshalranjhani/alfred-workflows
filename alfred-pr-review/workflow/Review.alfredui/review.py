@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -26,6 +27,10 @@ PROVIDER = "codex"
 MODEL = "gpt-6.2-sol"
 EFFORT = "reasoningEffort=high"
 BUSY = {"preparing", "queued", "starting", "running", "waiting", "submitted", "following"}
+ROUND_LABELS = {"review": "Review", "rereview": "Re-review", "saved": "Saved review"}
+STATUS_LABELS = {"waiting": "Needs input", "completed": "Complete", "failed": "Failed",
+                 "interrupted": "Stopped", "cancelled": "Cancelled", "rolled_back": "Rolled back",
+                 "no_result": "No report"}
 PR_URL = re.compile(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/"
                     r"([1-9][0-9]*)(?:[/?#][^\s<>()\[\]]*)?(?=$|[\s<>()\[\]])", re.IGNORECASE)
 
@@ -89,6 +94,61 @@ def save_record(pr, record):
     os.replace(file.name, DATA / f"{pr}.json")
 
 
+def rounds(record):
+    if "rounds" in record:
+        return record["rounds"]
+    if not record.get("head") and not record.get("reviewed_head"):
+        return []
+    saved = record.get("reviewed_head")
+    entries = []
+    if saved:
+        entries.append({"id": "saved", "kind": "saved", "head": saved,
+                        "status": "completed", "findings": record.get("findings", "")})
+    if not saved or record.get("status") != "completed" or record.get("head") != saved:
+        entries.append({"id": "latest", "kind": "rereview" if saved else "review",
+                        "head": record.get("head", ""), "status": record.get("status", "")})
+    return entries
+
+
+def status_label(state):
+    return STATUS_LABELS.get(state, "In progress" if state in BUSY else "")
+
+
+def saved_records():
+    records = {}
+    for path in DATA.glob("[0-9]*.json"):
+        if not re.fullmatch(r"[1-9][0-9]{0,9}", path.stem):
+            continue
+        try:
+            records[path.stem] = (path.stat().st_mtime, json.loads(path.read_text()))
+        except (OSError, ValueError):
+            continue
+    return records
+
+
+def history_fields(selected):
+    items = []
+    completed = rereviews = 0
+    reviewed_prs = set()
+    for pr, (modified, record) in saved_records().items():
+        for index, entry in enumerate(rounds(record)):
+            state, kind = entry["status"], entry["kind"]
+            if state == "completed":
+                completed += 1
+                rereviews += kind == "rereview"
+                reviewed_prs.add(pr)
+            started = datetime.fromisoformat(entry["started"]).astimezone() if entry.get("started") else None
+            subtitle = " · ".join(part for part in (status_label(state), started.strftime("%b %d") if started else "",
+                                                    entry.get("head", "")[:7]) if part)
+            row = {"uid": f"{pr}:{entry['id']}", "historyTitle.text": f"#{pr}    {ROUND_LABELS[kind]}",
+                   "historyMeta.text": subtitle, "title": record.get("title", "")}
+            items.append((started.timestamp() if started else modified, index, row))
+    items.sort(key=lambda item: item[:2], reverse=True)
+    return {"history": {"enabled": True, "data": {"src": [row for _, _, row in items]}, "select": selected},
+            "countPrs": {"text": str(len(reviewed_prs))}, "countRounds": {"text": str(completed)},
+            "countRereviews": {"text": str(rereviews)}}
+
+
 def read_thread(record):
     return t3("show", record["thread"], "--messages", "10")
 
@@ -98,7 +158,7 @@ def refresh(pr, record):
     thread = info["thread"]
     run = thread.get("activeRunId") or thread.get("latestRunId")
     if not run:
-        return  # T3 may still be provisioning the worktree.
+        return False  # T3 may still be provisioning the worktree.
     if record["run"] and run != record["run"]:
         # A child review can wake this thread after the first turn ends.
         messages = info["messages"]
@@ -106,6 +166,9 @@ def refresh(pr, record):
             message["role"] == "user" and message["runId"] == run for message in messages
         ):
             raise ReviewError("This T3 thread has another run. Open it to check the review.")
+    previous = json.dumps(record)
+    record.setdefault("rounds", rounds(record))
+    entry = record["rounds"][-1]
     record["run"] = run
     record["status"] = thread["status"]
     record["link"] = thread.get("link") or record.get("link", "")
@@ -120,9 +183,14 @@ def refresh(pr, record):
         if findings:
             record["findings"] = findings[-1]
             record["reviewed_head"] = record["head"]
+            entry["findings"] = findings[-1]
         else:
             record["status"] = "no_result"
+    entry["status"] = record["status"]
+    if json.dumps(record) == previous:
+        return False
     save_record(pr, record)
+    return True
 
 
 def git(directory, *args):
@@ -189,7 +257,7 @@ def launch(pr, action, record):
         if not path.is_file() or not os.access(path, os.R_OK):
             raise ReviewError(f"Required context file is unavailable: {path}")
     url = f"https://github.com/{REPO}/pull/{pr}"
-    revision = json.loads(command("gh", "pr", "view", url, "--json", "baseRefOid,headRefOid,state"))
+    revision = json.loads(command("gh", "pr", "view", url, "--json", "baseRefOid,headRefOid,state,title"))
     if revision["state"] != "OPEN":
         raise ReviewError("Choose an open pull request.")
     head, base = revision["headRefOid"], revision["baseRefOid"]
@@ -213,8 +281,12 @@ def launch(pr, action, record):
     else:
         raise ReviewError("The review worktree is unavailable. Open the thread in T3.")
 
-    record.update(thread=result["threadId"], run=result["runId"], head=head,
-                  status="submitted",
+    record.setdefault("rounds", rounds(record)).append({
+        "id": uuid.uuid4().hex, "kind": action, "head": head, "status": "submitted",
+        "started": datetime.now(timezone.utc).isoformat(),
+    })
+    record.update(thread=result["threadId"], run=result["runId"], head=head, status="submitted",
+                  title=revision.get("title", ""),
                   link=result.get("link") or record.get("link", ""))
     save_record(pr, record)
 
@@ -225,72 +297,83 @@ def thread_url(link):
     return url if url.startswith(("t3-thread://", "https://app.t3.codes/")) else ""
 
 
-def render(pr, record, *, fill=False, error=""):
+def render(pr, record, *, fill=False, error="", selected="", dashboard=False):
     state = record.get("status")
     active = state in BUSY
     reviewed = bool(record.get("reviewed_head"))
-    statuses = {
-        "waiting": "T3 needs input",
-        "completed": "Review complete",
-        "failed": "Review failed · open in T3",
-        "interrupted": "Review stopped",
-        "cancelled": "Review cancelled",
-        "rolled_back": "Review rolled back",
-        "no_result": "No findings received · open in T3",
-    }
-    status = statuses.get(state, "Reviewing…" if active else "")
-    if status and record.get("head"):
-        status += f" · {record['head'][:8]}"
-    findings = record.get("findings", "")
-    if findings and record.get("reviewed_head") != record.get("head"):
-        findings = f"**Previous review**\n\n{findings}"
+    entries = rounds(record)
+    latest = entries[-1] if entries else {}
+    entry = next((item for item in entries if f"{pr}:{item['id']}" == selected), latest)
+    selected = f"{pr}:{entry['id']}" if entry else ""
+    status = " · ".join(part for part in (ROUND_LABELS.get(entry.get("kind"), ""),
+                        status_label(entry.get("status")), entry.get("head", "")[:8]) if part)
+    report = entry.get("findings", "")
+    findings = report
+    if entry is latest and not report and record.get("findings"):
+        report = record["findings"]
+        findings = f"**Previous saved report**\n\n{report}"
     link = thread_url(record.get("link", ""))
+    title = f"PR #{pr}" if pr else "Select a pull request"
+    if record.get("title"):
+        title += f" · {record['title']}"
     fields = {
         "pr": {"enabled": True},
+        "history": {"enabled": True},
+        "repository": {"text": REPO},
+        "detailTitle": {"text": title},
         "review": {"enabled": bool(pr) and not active and not reviewed},
         "rereview": {"enabled": reviewed and not active},
         "status": {"text": error or status},
         "findings": {"text": findings},
         "open": {"enabled": bool(link)},
-        "copy": {"enabled": bool(record.get("findings"))},
+        "copy": {"enabled": bool(report)},
     }
     if fill:
         fields["pr"]["text"] = pr
-        fields["pr"]["focus"] = True
+    if dashboard:
+        fields.update(history_fields(selected))
     return {
         "update": {"ids": fields},
-        "variables": {"selected_pr": pr, "thread_url": link, "report": record.get("findings", "")},
+        "variables": {"selected_pr": pr, "selected_round": selected, "thread_url": link, "report": report},
         "pulse": {"interval": 2 if active else 0},
     }
 
 
-def main(action, value):
+def main(action, value, selection=""):
     if action == "auto" and not value:
         return {}
     if not REPO_SLUG.fullmatch(REPO):
-        return render("", {}, error="Set the GitHub repository in Alfred → Workflows → PR Review.")
+        return render("", {}, error="Set the GitHub repository in Alfred → Workflows → PR Review.", dashboard=True)
+    if action == "history":
+        match = re.fullmatch(r"([1-9][0-9]{0,9}):(?:[a-f0-9]{32}|saved|latest)", value)
+        if not match or value == selection:
+            return {}
+        return render(match[1], read_record(match[1]), fill=True, selected=value)
     pr = selected_number(value) if action in ("init", "auto") else number(value)
     selection_error = "Select one PR link from the configured repository."
     if action == "init":
         if value:
             if not pr:
-                return render("", {}, error=selection_error)
-            view = render(pr, read_record(pr), fill=True, error="Opening review…")
-            for field in ("pr", "review", "rereview"):
+                return render("", {}, error=selection_error, dashboard=True)
+            view = render(pr, read_record(pr), fill=True, error="Opening review…", dashboard=True)
+            for field in ("pr", "history", "review", "rereview"):
                 view["update"]["ids"][field]["enabled"] = False
             view["pulse"]["interval"] = 0
             return view
-        clipboard = command("/usr/bin/pbpaste", timeout=2).strip()
-        recent = max(DATA.glob("[0-9]*.json"), key=lambda path: path.stat().st_mtime, default=None)
-        pr = url_number(PR_URL.fullmatch(clipboard)) or (recent.stem if recent else "")
-        return render(pr, read_record(pr), fill=True)
+        if selection:
+            pr = number(selection)
+            return render(pr, read_record(pr), fill=True, dashboard=True,
+                          error="Enter a PR number or URL from the configured repository." if not pr else "")
+        records = saved_records()
+        pr = max(records, key=lambda key: records[key][0], default="")
+        return render(pr, read_record(pr), fill=True, dashboard=True)
     if not pr:
         error = selection_error if action == "auto" else "Enter a PR number or URL from the configured repository."
-        return render("", {}, error=error if value.strip() else "")
+        return render("", {}, error=error if value.strip() else "", dashboard=True)
 
     record = read_record(pr)
     if action == "select" or (action == "poll" and record.get("status") not in BUSY):
-        return render(pr, record)
+        return render(pr, record, selected=selection, dashboard=True)
 
     DATA.mkdir(parents=True, exist_ok=True)
     with (DATA / f"{pr}.lock").open("w") as lock:
@@ -300,19 +383,22 @@ def main(action, value):
             return {} if action == "poll" else render(pr, record, error="This review is being updated.")
         record = read_record(pr)
         try:
+            changed = False
             if record.get("status") in BUSY:
-                refresh(pr, record)
+                changed = refresh(pr, record)
+            if action == "poll" and not changed:
+                return {}
             if action == "auto" and record.get("status") not in BUSY:
                 action = "rereview" if record.get("reviewed_head") else "review"
             if action in ("review", "rereview"):
                 launch(pr, action, record)
         except (ReviewError, OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
-            return render(pr, record, error=str(error))
-    return render(pr, record)
+            return render(pr, record, selected=selection, error=str(error), dashboard=True)
+    return render(pr, record, selected=selection, dashboard=True)
 
 
 if __name__ == "__main__":
     try:
-        print(json.dumps(main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "")))
+        print(json.dumps(main(*(sys.argv[1:] + [""] * 3)[:3])))
     except (ReviewError, OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
         print(json.dumps(render("", {}, error=str(error))))

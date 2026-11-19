@@ -32,19 +32,6 @@
 				<false/>
 			</dict>
 		</array>
-		<key>B50D202E-B802-4E4A-A1B3-0A47A1F8EC2E</key>
-		<array>
-			<dict>
-				<key>destinationuid</key>
-				<string>8986F33B-804A-42C8-9B5C-2D244C672128</string>
-				<key>modifiers</key>
-				<integer>0</integer>
-				<key>modifiersubtext</key>
-				<string></string>
-				<key>vitoclose</key>
-				<false/>
-			</dict>
-		</array>
 		<key>BA60C80F-85EF-4E64-8DD7-96C2DAA02957</key>
 		<array>
 			<dict>
@@ -84,17 +71,17 @@
 			<key>config</key>
 			<dict>
 				<key>argumenttype</key>
-				<integer>2</integer>
+				<integer>1</integer>
 				<key>keyword</key>
 				<string>prreview</string>
 				<key>skipuniversalaction</key>
 				<true/>
 				<key>subtext</key>
-				<string>Review a GitHub pull request with T3 Code</string>
+				<string>Open review history or enter a PR number</string>
 				<key>text</key>
 				<string>PR Review</string>
 				<key>withspace</key>
-				<false/>
+				<true/>
 			</dict>
 			<key>type</key>
 			<string>alfred.workflow.input.keyword</string>
@@ -102,35 +89,6 @@
 			<string>BA60C80F-85EF-4E64-8DD7-96C2DAA02957</string>
 			<key>version</key>
 			<integer>1</integer>
-		</dict>
-		<dict>
-			<key>config</key>
-			<dict>
-				<key>action</key>
-				<integer>0</integer>
-				<key>argument</key>
-				<integer>0</integer>
-				<key>focusedappvariable</key>
-				<false/>
-				<key>focusedappvariablename</key>
-				<string></string>
-				<key>hotkey</key>
-				<integer>15</integer>
-				<key>hotmod</key>
-				<integer>1835008</integer>
-				<key>leftcursor</key>
-				<false/>
-				<key>modsmode</key>
-				<integer>0</integer>
-				<key>relatedAppsMode</key>
-				<integer>0</integer>
-			</dict>
-			<key>type</key>
-			<string>alfred.workflow.trigger.hotkey</string>
-			<key>uid</key>
-			<string>B50D202E-B802-4E4A-A1B3-0A47A1F8EC2E</string>
-			<key>version</key>
-			<integer>2</integer>
 		</dict>
 		<dict>
 			<key>config</key>
@@ -207,9 +165,11 @@
 		</dict>
 	</array>
 	<key>readme</key>
-	<string>Select a GitHub PR link, press ⌘/ and choose **Review or re-review PR**. Alfred starts the right action from the saved review history.
+	<string>Type `prreview` to open review history, or `prreview 123` to open a PR by number. Select a round to read its report.
 
-Open the panel with ⌃⌥⌘R or `prreview`. Enter a PR number or URL, then press ⌘↩ to review or ⌘⇧↩ to re-review. ⌘O opens the T3 thread. ⌘⇧C copies the findings.
+Press ⌘↩ to review or ⌘⇧↩ to re-review. ⌘O opens the T3 thread. ⌘⇧C copies the displayed findings.
+
+To start from a selected GitHub PR link, press ⌘/ and choose Review or re-review PR.
 
 Review actions can post verified inline comments as you. Configure the GitHub repository, T3 checkout, and any reference documents in Alfred before running.
 </string>
@@ -235,13 +195,6 @@ Review actions can post verified inline comments as you. Configure the GitHub re
 			<integer>55</integer>
 			<key>ypos</key>
 			<integer>280</integer>
-		</dict>
-		<key>B50D202E-B802-4E4A-A1B3-0A47A1F8EC2E</key>
-		<dict>
-			<key>xpos</key>
-			<integer>55</integer>
-			<key>ypos</key>
-			<integer>170</integer>
 		</dict>
 		<key>BA60C80F-85EF-4E64-8DD7-96C2DAA02957</key>
 		<dict>
@@ -327,6 +280,6 @@ Review actions can post verified inline comments as you. Configure the GitHub re
 		</dict>
 	</array>
 	<key>version</key>
-	<string>1.1.0</string>
+	<string>1.2.0</string>
 </dict>
 </plist>

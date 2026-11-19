@@ -14,7 +14,11 @@ Keep T3 Code running. The local T3 CLI must support `t3 thread start --option`. 
 
 Select a pull request link, press ⌘/, and choose Review or re-review PR. The action accepts a link or plain text containing one link from the configured repository. It starts a first review when no completed review exists. After a review completes, the action sends the follow-up prompt to the same thread. If a review is active, the action shows that run in Alfred.
 
-To open the panel without starting a review, press ⌃⌥⌘R or type `prreview`. Enter a pull request number or URL. Press ⌘↩ to review or ⌘⇧↩ to re-review. Press ⌘O to open the thread in T3 Code or ⌘⇧C to copy the findings.
+Type `prreview` to open the dashboard. To open a specific pull request, type its number after the keyword, for example `prreview 123`. The keyword opens the panel without starting a review.
+
+Select a round in History to read its findings. Filter by pull request number or title. The dashboard counts pull requests reviewed, completed rounds, and completed re-reviews. Records from older versions include the saved report and latest attempt when available.
+
+Press ⌘↩ to review or ⌘⇧↩ to re-review. Press ⌘O to open the thread in T3 Code or ⌘⇧C to copy the displayed findings.
 
 Starting a review authorizes the reviewer to post verified, important inline comments with your GitHub account. Keep the review thread on the configured model and effort. A re-review uses the thread's existing settings.
 

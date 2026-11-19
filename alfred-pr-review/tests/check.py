@@ -16,6 +16,9 @@ spec.loader.exec_module(review)
 def check():
     info = plistlib.loads((SOURCE.parents[1] / "info.plist").read_bytes())
     objects = {obj["uid"]: obj for obj in info["objects"]}
+    assert not any(obj["type"].endswith(".hotkey") for obj in objects.values())
+    keyword = next(obj for obj in objects.values() if obj["type"].endswith(".keyword"))
+    assert keyword["config"]["keyword"] == "prreview" and keyword["config"]["argumenttype"] == 1
     trigger = next(obj for obj in objects.values() if obj["type"].endswith(".universalaction"))
     assert trigger["config"]["acceptsurls"] and trigger["config"]["acceptstext"]
     selection = objects[info["connections"][trigger["uid"]][0]["destinationuid"]]
@@ -27,6 +30,7 @@ def check():
             assert info["connections"][obj["uid"]][0]["destinationuid"] == panel["uid"]
     ui = json.loads(SOURCE.with_name("ui.json").read_text())
     assert ui["variablesconfig"]["review_selection"]["src"] == "variable"
+    assert ui["variablesconfig"]["keyword_pr"]["src"] == "args[0]"
     assert any(event["triggers"] == "launched" and
                event["action"]["args"] == ["auto", "{var:review_selection}"]
                for event in ui["window"]["root"]["events"])
@@ -71,7 +75,7 @@ def check():
 
         def mock_command(*args, **kwargs):
             assert args[:3] == ("gh", "pr", "view"), args
-            return json.dumps({"headRefOid": head, "baseRefOid": base, "state": "OPEN"})
+            return json.dumps({"headRefOid": head, "baseRefOid": base, "state": "OPEN", "title": "Fix review target"})
 
         def mock_git(path, *args):
             if args == ("remote", "get-url", "origin"):
@@ -107,6 +111,8 @@ def check():
             assert review.main("auto", "https://github.com/example/other/pull/42")["update"]["ids"]["status"]["text"]
             assert review.main("auto", f"{url} {url}0")["update"]["ids"]["status"]["text"]
             assert not sent
+            assert review.main("init", "", "42")["update"]["ids"]["pr"]["text"] == "42"
+            assert not sent
             assert not review.main("select", "#42")["update"]["ids"]["rereview"]["enabled"]
             assert review.main("init", url)["update"]["ids"]["pr"]["text"] == "42"
             assert review.main("auto", url)["pulse"]["interval"] == 2
@@ -137,7 +143,29 @@ def check():
             assert review.read_record("42")["thread"] == "thread"
             assert review.read_record("42")["reviewed_head"] == head
             assert git(repo, "rev-parse", "HEAD") == base
-    print("Review and re-review passed with an isolated worktree and one T3 thread.")
+
+            dashboard = review.main("init", "")
+            fields = dashboard["update"]["ids"]
+            assert fields["detailTitle"]["text"] == "PR #42 · Fix review target"
+            rows = fields["history"]["data"]["src"]
+            assert [row["historyTitle.text"] for row in rows] == ["#42    Re-review", "#42    Review"]
+            assert fields["countPrs"]["text"] == "1"
+            assert fields["countRounds"]["text"] == "2"
+            assert fields["countRereviews"]["text"] == "1"
+            previous = review.main("history", rows[1]["uid"], rows[0]["uid"])
+            assert previous["variables"]["report"] == "Findings for run-1-final"
+            assert review.main("history", rows[0]["uid"], rows[0]["uid"]) == {}
+            assert len(sent) == 2
+
+            review.save_record("43", {"status": "interrupted", "reviewed_head": first_head,
+                                      "head": head, "findings": "Older saved report"})
+            legacy = review.main("history", "43:saved")
+            assert legacy["variables"]["report"] == "Older saved report"
+            fields = review.history_fields("")
+            assert fields["countPrs"]["text"] == "2" and fields["countRounds"]["text"] == "3"
+            assert fields["countRereviews"]["text"] == "1"
+            assert len(fields["history"]["data"]["src"]) == 4
+    print("Keyword, review history, and both review rounds passed with one T3 thread per PR.")
 
 
 if __name__ == "__main__":

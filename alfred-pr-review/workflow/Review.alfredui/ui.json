@@ -24,6 +24,9 @@
               },
               "status": {
                 "text": "Preparing review…"
+              },
+              "history": {
+                "enabled": false
               }
             }
           }
@@ -59,6 +62,9 @@
               },
               "status": {
                 "text": "Preparing review…"
+              },
+              "history": {
+                "enabled": false
               }
             }
           }
@@ -73,7 +79,8 @@
         ],
         "async": true
       }
-    ]
+    ],
+    "selected_round": ""
   },
   "pulse": {
     "interval": 0,
@@ -81,20 +88,21 @@
     "src": "review.py",
     "args": [
       "poll",
-      "{var:selected_pr}"
+      "{var:selected_pr}",
+      "{var:selected_round}"
     ]
   },
   "window": {
     "title": "PR Review",
     "size": {
-      "width": 680,
-      "height": 470
+      "width": 890,
+      "height": 600
     },
     "root": {
       "type": "view",
       "layout": "border",
       "padding": 16,
-      "spacing": 12,
+      "spacing": 13,
       "events": [
         {
           "triggers": "preload",
@@ -103,7 +111,8 @@
             "src": "review.py",
             "args": [
               "init",
-              "{var:review_selection}"
+              "{var:review_selection}",
+              "{var:keyword_pr}"
             ]
           }
         },
@@ -123,81 +132,60 @@
       "components": [
         {
           "type": "view",
-          "layout": "inline",
-          "direction": "vertical",
-          "padding": 0,
-          "spacing": 8,
-          "constraints": {
-            "region": "top"
-          },
+          "layout": "border",
           "components": [
             {
-              "type": "label",
-              "text": "PR Review",
-              "font": {
-                "size": 20,
-                "weight": "semibold"
-              }
-            },
-            {
-              "type": "textfield",
-              "id": "pr",
-              "placeholder": "PR number or GitHub URL",
-              "focus": true,
-              "constraints": {
-                "stretch": "horizontal"
-              },
-              "events": [
-                {
-                  "triggers": "typingstopped",
-                  "action": {
-                    "type": "script",
-                    "src": "review.py",
-                    "args": [
-                      "select",
-                      "{value:pr.text}"
-                    ]
-                  }
-                }
-              ]
-            },
-            {
               "type": "view",
-              "layout": "inline",
-              "direction": "horizontal",
-              "padding": 0,
-              "spacing": 8,
-              "constraints": {
-                "region": "top"
-              },
+              "layout": "border",
               "components": [
                 {
-                  "type": "button",
-                  "id": "review",
-                  "text": "Review",
-                  "shortcut": "⌘↩",
-                  "tooltip": "Review and post important findings · ⌘↩",
-                  "enabled": false,
-                  "events": [
+                  "type": "view",
+                  "layout": "inline",
+                  "direction": "horizontal",
+                  "spacing": 9,
+                  "components": [
                     {
-                      "triggers": "actioned",
-                      "action": "{var:review_action}"
-                    }
-                  ]
-                },
-                {
-                  "type": "button",
-                  "id": "rereview",
-                  "text": "Re-review",
-                  "shortcut": "⌘⇧↩",
-                  "tooltip": "Re-review in the same thread · ⌘⇧↩",
-                  "enabled": false,
-                  "events": [
+                      "type": "imageview",
+                      "image": {
+                        "type": "file",
+                        "src": "../icon.png"
+                      },
+                      "constraints": {
+                        "size": {
+                          "width": 42,
+                          "height": 42
+                        }
+                      }
+                    },
                     {
-                      "triggers": "actioned",
-                      "action": "{var:rereview_action}"
+                      "type": "view",
+                      "layout": "inline",
+                      "direction": "vertical",
+                      "spacing": 2,
+                      "components": [
+                        {
+                          "type": "label",
+                          "text": "PR Review",
+                          "font": {
+                            "size": 23,
+                            "weight": "semibold"
+                          }
+                        },
+                        {
+                          "type": "label",
+                          "text": "",
+                          "font": {
+                            "size": 12
+                          },
+                          "id": "repository",
+                          "colour": "secondaryLabelColor"
+                        }
+                      ]
                     }
-                  ]
+                  ],
+                  "constraints": {
+                    "region": "left"
+                  }
                 },
                 {
                   "type": "label",
@@ -205,102 +193,432 @@
                   "colour": "secondaryLabelColor",
                   "font": {
                     "size": 11
+                  },
+                  "constraints": {
+                    "region": "right",
+                    "position": "right"
                   }
                 }
-              ]
+              ],
+              "constraints": {
+                "region": "top"
+              }
+            },
+            {
+              "type": "view",
+              "layout": "flex",
+              "cols": 3,
+              "rows": 1,
+              "spacing": 9,
+              "components": [
+                {
+                  "type": "template",
+                  "src": "stat",
+                  "params": {
+                    "count": "countPrs",
+                    "caption": "PRs reviewed"
+                  },
+                  "constraints": {
+                    "grid": {
+                      "row": 0,
+                      "col": 0,
+                      "colweight": 1
+                    }
+                  }
+                },
+                {
+                  "type": "template",
+                  "src": "stat",
+                  "params": {
+                    "count": "countRounds",
+                    "caption": "Rounds completed"
+                  },
+                  "constraints": {
+                    "grid": {
+                      "row": 0,
+                      "col": 1,
+                      "colweight": 1
+                    }
+                  }
+                },
+                {
+                  "type": "template",
+                  "src": "stat",
+                  "params": {
+                    "count": "countRereviews",
+                    "caption": "Re-reviews completed"
+                  },
+                  "constraints": {
+                    "grid": {
+                      "row": 0,
+                      "col": 2,
+                      "colweight": 1
+                    }
+                  }
+                }
+              ],
+              "constraints": {
+                "region": "bottom"
+              }
             }
-          ]
-        },
-        {
-          "type": "markdownarea",
-          "id": "findings",
+          ],
+          "spacing": 10,
           "constraints": {
-            "region": "centre"
-          },
-          "background": null,
-          "autoadjustcontentinsets": false,
-          "behaviour": {
-            "mode": "replace",
-            "scroll": "start"
+            "region": "top"
           }
         },
         {
           "type": "view",
           "layout": "border",
-          "spacing": 8,
-          "constraints": {
-            "region": "bottom"
-          },
           "components": [
             {
-              "type": "label",
-              "id": "status",
-              "text": "",
-              "colour": "secondaryLabelColor",
-              "font": {
-                "size": 12
+              "type": "view",
+              "layout": "border",
+              "components": [
+                {
+                  "type": "view",
+                  "layout": "inline",
+                  "direction": "vertical",
+                  "spacing": 8,
+                  "components": [
+                    {
+                      "type": "label",
+                      "text": "History",
+                      "font": {
+                        "size": 15,
+                        "weight": "semibold"
+                      }
+                    },
+                    {
+                      "type": "textfield",
+                      "id": "historySearch",
+                      "placeholder": "Filter by PR or title",
+                      "constraints": {
+                        "stretch": "horizontal"
+                      },
+                      "events": [
+                        {
+                          "triggers": "changed",
+                          "action": {
+                            "type": "function",
+                            "src": "history",
+                            "args": "filterdata"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "constraints": {
+                    "region": "top"
+                  }
+                },
+                {
+                  "type": "dataview",
+                  "id": "history",
+                  "placeholder": "No review rounds",
+                  "spacing": 4,
+                  "behaviour": {
+                    "selection": {
+                      "allowempty": true,
+                      "wrap": "vertical"
+                    }
+                  },
+                  "cell": {
+                    "height": 52,
+                    "root": {
+                      "type": "view",
+                      "layout": "inline",
+                      "direction": "vertical",
+                      "spacing": 4,
+                      "components": [
+                        {
+                          "type": "label",
+                          "text": "",
+                          "font": {
+                            "size": 13,
+                            "weight": "semibold"
+                          },
+                          "id": "historyTitle",
+                          "constraints": {
+                            "stretch": "horizontal"
+                          }
+                        },
+                        {
+                          "type": "label",
+                          "text": "",
+                          "font": {
+                            "size": 11
+                          },
+                          "id": "historyMeta",
+                          "colour": "secondaryLabelColor",
+                          "constraints": {
+                            "stretch": "horizontal"
+                          }
+                        }
+                      ],
+                      "id": "historyCell",
+                      "padding": 8,
+                      "cornerradius": 7
+                    },
+                    "init": {
+                      "historyCell.background": null,
+                      "historyTitle.colour": "labelColor",
+                      "historyMeta.colour": "secondaryLabelColor"
+                    },
+                    "selected": {
+                      "historyCell.background": "alfredSelectedResultBackgroundColor",
+                      "historyTitle.colour": "alfredSelectedResultTextColor",
+                      "historyMeta.colour": "alfredSelectedResultTextColor"
+                    }
+                  },
+                  "data": {
+                    "type": "basic",
+                    "src": [],
+                    "filter": {
+                      "type": "basic",
+                      "args": [
+                        "historyTitle.text",
+                        "historyMeta.text",
+                        "title"
+                      ],
+                      "match": "{value:historySearch.text}"
+                    }
+                  },
+                  "events": [
+                    {
+                      "triggers": "changed",
+                      "action": {
+                        "type": "script",
+                        "src": "review.py",
+                        "args": [
+                          "history",
+                          "{value:self.selected.uid}",
+                          "{var:selected_round}"
+                        ]
+                      }
+                    }
+                  ],
+                  "constraints": {
+                    "region": "centre"
+                  }
+                }
+              ],
+              "spacing": 8,
+              "padding": 11,
+              "cornerradius": 13,
+              "background": {
+                "light": "#637E8512",
+                "dark": "#B4D6DF12"
               },
               "constraints": {
-                "region": "centre"
+                "region": "left",
+                "size": {
+                  "width": 236
+                }
               }
             },
             {
               "type": "view",
-              "layout": "inline",
-              "direction": "horizontal",
-              "padding": 0,
-              "spacing": 8,
-              "constraints": {
-                "region": "right"
-              },
+              "layout": "border",
               "components": [
                 {
-                  "type": "button",
-                  "id": "copy",
-                  "text": "Copy",
-                  "shortcut": "⌘⇧C",
-                  "tooltip": "Copy findings · ⌘⇧C",
-                  "enabled": false,
-                  "events": [
+                  "type": "view",
+                  "layout": "inline",
+                  "direction": "vertical",
+                  "spacing": 9,
+                  "components": [
                     {
-                      "triggers": "actioned",
-                      "action": {
-                        "type": "json",
-                        "src": {
-                          "copy": {
-                            "type": "text",
-                            "src": "{var:report}"
+                      "type": "label",
+                      "text": "Select a pull request",
+                      "font": {
+                        "size": 19,
+                        "weight": "semibold"
+                      },
+                      "id": "detailTitle",
+                      "constraints": {
+                        "stretch": "horizontal"
+                      }
+                    },
+                    {
+                      "type": "textfield",
+                      "id": "pr",
+                      "placeholder": "PR number or GitHub URL",
+                      "focus": true,
+                      "constraints": {
+                        "stretch": "horizontal"
+                      },
+                      "events": [
+                        {
+                          "triggers": "typingstopped",
+                          "action": {
+                            "type": "script",
+                            "src": "review.py",
+                            "args": [
+                              "select",
+                              "{value:pr.text}"
+                            ]
                           }
                         }
-                      }
+                      ]
+                    },
+                    {
+                      "type": "view",
+                      "layout": "inline",
+                      "direction": "horizontal",
+                      "spacing": 8,
+                      "components": [
+                        {
+                          "type": "button",
+                          "id": "review",
+                          "text": "Review",
+                          "shortcut": "⌘↩",
+                          "tooltip": "Review and post important findings · ⌘↩",
+                          "enabled": false,
+                          "events": [
+                            {
+                              "triggers": "actioned",
+                              "action": "{var:review_action}"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "button",
+                          "id": "rereview",
+                          "text": "Re-review",
+                          "shortcut": "⌘⇧↩",
+                          "tooltip": "Re-review in the same thread · ⌘⇧↩",
+                          "enabled": false,
+                          "events": [
+                            {
+                              "triggers": "actioned",
+                              "action": "{var:rereview_action}"
+                            }
+                          ]
+                        }
+                      ]
                     }
-                  ]
+                  ],
+                  "constraints": {
+                    "region": "top"
+                  }
                 },
                 {
-                  "type": "button",
-                  "id": "open",
-                  "text": "Open in T3",
-                  "shortcut": "⌘O",
-                  "tooltip": "Open the review thread · ⌘O",
-                  "enabled": false,
-                  "events": [
+                  "type": "view",
+                  "layout": "border",
+                  "components": [
                     {
-                      "triggers": "actioned",
-                      "action": {
-                        "type": "json",
-                        "src": {
-                          "open": {
-                            "type": "url",
-                            "src": "{var:thread_url}"
-                          }
-                        }
+                      "type": "markdownarea",
+                      "id": "findings",
+                      "constraints": {
+                        "region": "centre"
+                      },
+                      "background": null,
+                      "autoadjustcontentinsets": false,
+                      "behaviour": {
+                        "mode": "replace",
+                        "scroll": "start"
                       }
                     }
-                  ]
+                  ],
+                  "padding": 8,
+                  "cornerradius": 12,
+                  "background": {
+                    "light": "#637E8512",
+                    "dark": "#B4D6DF12"
+                  },
+                  "constraints": {
+                    "region": "centre"
+                  }
+                },
+                {
+                  "type": "view",
+                  "layout": "border",
+                  "components": [
+                    {
+                      "type": "label",
+                      "id": "status",
+                      "text": "",
+                      "colour": "secondaryLabelColor",
+                      "font": {
+                        "size": 12
+                      },
+                      "constraints": {
+                        "region": "centre"
+                      }
+                    },
+                    {
+                      "type": "view",
+                      "layout": "inline",
+                      "direction": "horizontal",
+                      "padding": 0,
+                      "spacing": 8,
+                      "constraints": {
+                        "region": "right"
+                      },
+                      "components": [
+                        {
+                          "type": "button",
+                          "id": "copy",
+                          "text": "Copy",
+                          "shortcut": "⌘⇧C",
+                          "tooltip": "Copy findings · ⌘⇧C",
+                          "enabled": false,
+                          "events": [
+                            {
+                              "triggers": "actioned",
+                              "action": {
+                                "type": "json",
+                                "src": {
+                                  "copy": {
+                                    "type": "text",
+                                    "src": "{var:report}"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "button",
+                          "id": "open",
+                          "text": "Open in T3",
+                          "shortcut": "⌘O",
+                          "tooltip": "Open the review thread · ⌘O",
+                          "enabled": false,
+                          "events": [
+                            {
+                              "triggers": "actioned",
+                              "action": {
+                                "type": "json",
+                                "src": {
+                                  "open": {
+                                    "type": "url",
+                                    "src": "{var:thread_url}"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ],
+                  "spacing": 8,
+                  "constraints": {
+                    "region": "bottom"
+                  }
                 }
-              ]
+              ],
+              "spacing": 12,
+              "constraints": {
+                "region": "centre"
+              }
             }
-          ]
+          ],
+          "spacing": 14,
+          "constraints": {
+            "region": "centre"
+          }
         }
       ]
     }
@@ -325,6 +643,43 @@
       "src": "variable",
       "default": "",
       "scriptenv": true
+    },
+    "keyword_pr": {
+      "src": "args[0]",
+      "default": ""
+    }
+  },
+  "templates": {
+    "stat": {
+      "type": "view",
+      "layout": "inline",
+      "direction": "vertical",
+      "spacing": 3,
+      "components": [
+        {
+          "type": "label",
+          "text": "0",
+          "font": {
+            "size": 24,
+            "weight": "semibold"
+          },
+          "id": "{param:count}"
+        },
+        {
+          "type": "label",
+          "text": "{param:caption}",
+          "font": {
+            "size": 11
+          },
+          "colour": "secondaryLabelColor"
+        }
+      ],
+      "padding": 10,
+      "background": {
+        "light": "#2C888915",
+        "dark": "#6BE1D517"
+      },
+      "cornerradius": 11
     }
   }
 }
