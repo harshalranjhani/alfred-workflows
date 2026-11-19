@@ -9,7 +9,7 @@ archive = dist / "PR Review.alfredworkflow"
 
 with ZipFile(archive, "w", ZIP_DEFLATED) as package:
     for name in ("info.plist", "icon.png", "Review.alfredui/ui.json",
-                 "Review.alfredui/review.py", "Review.alfredui/review.md",
+                 "Review.alfredui/review.py", "Review.alfredui/github_activity.py", "Review.alfredui/review.md",
                  "Review.alfredui/rereview.md"):
         package.write(root / "workflow" / name, name)
 

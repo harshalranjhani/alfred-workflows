@@ -27,6 +27,15 @@
               },
               "history": {
                 "enabled": false
+              },
+              "reportTab": {
+                "enabled": false
+              },
+              "activity": {
+                "enabled": false
+              },
+              "approve": {
+                "enabled": false
               }
             }
           }
@@ -65,6 +74,15 @@
               },
               "history": {
                 "enabled": false
+              },
+              "reportTab": {
+                "enabled": false
+              },
+              "activity": {
+                "enabled": false
+              },
+              "approve": {
+                "enabled": false
               }
             }
           }
@@ -80,7 +98,11 @@
         "async": true
       }
     ],
-    "selected_round": ""
+    "selected_round": "",
+    "github_url": "",
+    "approval_token": "",
+    "approval_short": "",
+    "approval_viewer": ""
   },
   "pulse": {
     "interval": 0,
@@ -494,6 +516,154 @@
                               "action": "{var:rereview_action}"
                             }
                           ]
+                        },
+                        {
+                          "type": "button",
+                          "id": "reportTab",
+                          "text": "Report",
+                          "enabled": false,
+                          "tooltip": "Show the selected review report",
+                          "events": [
+                            {
+                              "triggers": "actioned",
+                              "action": {
+                                "type": "script",
+                                "src": "review.py",
+                                "args": [
+                                  "report",
+                                  "{var:selected_pr}",
+                                  "{var:selected_round}"
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "button",
+                          "id": "activity",
+                          "text": "Activity",
+                          "enabled": false,
+                          "tooltip": "Load the latest GitHub comments, replies and review status",
+                          "events": [
+                            {
+                              "triggers": "actioned",
+                              "action": [
+                                {
+                                  "type": "json",
+                                  "src": {
+                                    "pulse": {
+                                      "interval": 0
+                                    },
+                                    "update": {
+                                      "ids": {
+                                        "pr": {
+                                          "enabled": false
+                                        },
+                                        "history": {
+                                          "enabled": false
+                                        },
+                                        "review": {
+                                          "enabled": false
+                                        },
+                                        "rereview": {
+                                          "enabled": false
+                                        },
+                                        "reportTab": {
+                                          "enabled": false
+                                        },
+                                        "activity": {
+                                          "enabled": false
+                                        },
+                                        "approve": {
+                                          "enabled": false
+                                        },
+                                        "status": {
+                                          "text": "Loading GitHub activity…"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": "script",
+                                  "src": "review.py",
+                                  "async": true,
+                                  "args": [
+                                    "activity",
+                                    "{value:pr.text}",
+                                    "{var:selected_round}"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "button",
+                          "id": "approve",
+                          "text": "Approve PR",
+                          "enabled": false,
+                          "tooltip": "Approve the checked commit on GitHub",
+                          "events": [
+                            {
+                              "triggers": "actioned",
+                              "action": [
+                                {
+                                  "type": "json",
+                                  "src": {
+                                    "pulse": {
+                                      "interval": 0
+                                    },
+                                    "update": {
+                                      "ids": {
+                                        "pr": {
+                                          "enabled": false
+                                        },
+                                        "history": {
+                                          "enabled": false
+                                        },
+                                        "review": {
+                                          "enabled": false
+                                        },
+                                        "rereview": {
+                                          "enabled": false
+                                        },
+                                        "reportTab": {
+                                          "enabled": false
+                                        },
+                                        "activity": {
+                                          "enabled": false
+                                        },
+                                        "approve": {
+                                          "enabled": false
+                                        },
+                                        "status": {
+                                          "text": "Submitting approval…"
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": "script",
+                                  "src": "review.py",
+                                  "async": true,
+                                  "args": [
+                                    "approve",
+                                    "{var:selected_pr}",
+                                    "{var:selected_round}",
+                                    "{var:approval_token}"
+                                  ]
+                                }
+                              ],
+                              "confirm": {
+                                "message": "Approve PR #{var:selected_pr} on GitHub?",
+                                "informativetext": "Submit approval as @{var:approval_viewer} for commit {var:approval_short}.",
+                                "confirmbuttontext": "Approve PR",
+                                "cancelbuttontext": "Cancel"
+                              }
+                            }
+                          ]
                         }
                       ]
                     }
@@ -594,6 +764,27 @@
                                   "open": {
                                     "type": "url",
                                     "src": "{var:thread_url}"
+                                  }
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "button",
+                          "id": "github",
+                          "text": "GitHub",
+                          "enabled": false,
+                          "tooltip": "Open the PR on GitHub",
+                          "events": [
+                            {
+                              "triggers": "actioned",
+                              "action": {
+                                "type": "json",
+                                "src": {
+                                  "open": {
+                                    "type": "url",
+                                    "src": "{var:github_url}"
                                   }
                                 }
                               }

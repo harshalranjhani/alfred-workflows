@@ -11,6 +11,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+import github_activity
+
 HERE = Path(__file__).resolve().parent
 HOME = Path.home()
 REPO = os.environ.get("review_repository", "").strip()
@@ -327,6 +329,10 @@ def render(pr, record, *, fill=False, error="", selected="", dashboard=False):
         "findings": {"text": findings},
         "open": {"enabled": bool(link)},
         "copy": {"enabled": bool(report)},
+        "activity": {"enabled": bool(pr)},
+        "reportTab": {"enabled": False},
+        "approve": {"enabled": False},
+        "github": {"enabled": bool(pr)},
     }
     if fill:
         fields["pr"]["text"] = pr
@@ -334,12 +340,54 @@ def render(pr, record, *, fill=False, error="", selected="", dashboard=False):
         fields.update(history_fields(selected))
     return {
         "update": {"ids": fields},
-        "variables": {"selected_pr": pr, "selected_round": selected, "thread_url": link, "report": report},
+        "variables": {"selected_pr": pr, "selected_round": selected, "thread_url": link, "report": report,
+                      "github_url": f"https://github.com/{REPO}/pull/{pr}" if pr else "",
+                      "approval_token": "", "approval_short": "", "approval_viewer": ""},
         "pulse": {"interval": 2 if active else 0},
     }
 
 
-def main(action, value, selection=""):
+def activity_view(pr, record, selection, approval=None):
+    view = render(pr, record, selected=selection, fill=True)
+    fields = view["update"]["ids"]
+    fields["reportTab"]["enabled"] = True
+    view["pulse"]["interval"] = 0
+    message = ""
+    token = ""
+    try:
+        viewer, pull, threads = github_activity.load(command, REPO, pr)
+        entries = rounds(record)
+        head = pull["headRefOid"]
+        reason = github_activity.eligibility(viewer, pull, threads, entries, record.get("status") in BUSY)
+        if not reason:
+            token = f"{viewer}:{head}"
+            if approval is not None:
+                if not approval or approval != token:
+                    raise ReviewError("The PR commit or GitHub account changed. Refresh Activity before approving.")
+                result = github_activity.approve(command, REPO, pr, head)
+                pull["reviews"]["nodes"].append({"author": {"login": viewer}, "state": "APPROVED", "commit": {"oid": head}})
+                token = ""
+                message = github_activity.link({"url": result.get("html_url", "")}, "Approved on GitHub")
+        markdown = github_activity.summarize(pull, viewer, threads, entries, record.get("reviewed_head"))
+        if reason:
+            markdown += f"\n\n{reason}"
+        if message:
+            markdown += f"\n\n{message}"
+        fields["detailTitle"]["text"] = f"PR #{pr} · {pull['title']}"
+        fields["status"]["text"] = f"GitHub activity · @{viewer}"
+        fields["approve"]["enabled"] = bool(token)
+        view["variables"].update(approval_token=token, approval_short=head[:8], approval_viewer=viewer)
+    except (ReviewError, OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+        headline = "Approval could not be confirmed" if approval is not None else "GitHub activity unavailable"
+        markdown = f"**{headline}**\n\n{github_activity.excerpt(str(error), 450)}"
+        fields["status"]["text"] = "Refresh Activity to try again"
+    fields["findings"]["text"] = markdown
+    fields["copy"]["enabled"] = True
+    view["variables"]["report"] = markdown
+    return view
+
+
+def main(action, value, selection="", approval=""):
     if action == "auto" and not value:
         return {}
     if not REPO_SLUG.fullmatch(REPO):
@@ -372,6 +420,10 @@ def main(action, value, selection=""):
         return render("", {}, error=error if value.strip() else "", dashboard=True)
 
     record = read_record(pr)
+    if action == "report":
+        return render(pr, record, selected=selection)
+    if action == "activity" and record.get("status") not in BUSY:
+        return activity_view(pr, record, selection)
     if action == "select" or (action == "poll" and record.get("status") not in BUSY):
         return render(pr, record, selected=selection, dashboard=True)
 
@@ -386,6 +438,8 @@ def main(action, value, selection=""):
             changed = False
             if record.get("status") in BUSY:
                 changed = refresh(pr, record)
+            if action in ("activity", "approve"):
+                return activity_view(pr, record, selection, approval=approval if action == "approve" else None)
             if action == "poll" and not changed:
                 return {}
             if action == "auto" and record.get("status") not in BUSY:
@@ -393,12 +447,14 @@ def main(action, value, selection=""):
             if action in ("review", "rereview"):
                 launch(pr, action, record)
         except (ReviewError, OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
+            if action == "activity":
+                return activity_view(pr, record, selection)
             return render(pr, record, selected=selection, error=str(error), dashboard=True)
     return render(pr, record, selected=selection, dashboard=True)
 
 
 if __name__ == "__main__":
     try:
-        print(json.dumps(main(*(sys.argv[1:] + [""] * 3)[:3])))
+        print(json.dumps(main(*(sys.argv[1:] + [""] * 4)[:4])))
     except (ReviewError, OSError, ValueError, KeyError, subprocess.TimeoutExpired) as error:
         print(json.dumps(render("", {}, error=str(error))))

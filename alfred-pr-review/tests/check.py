@@ -3,11 +3,13 @@ import importlib.util
 import json
 import plistlib
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parents[1] / "workflow/Review.alfredui/review.py"
+sys.path.insert(0, str(SOURCE.parent))
 spec = importlib.util.spec_from_file_location("review", SOURCE)
 review = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(review)
@@ -168,5 +170,84 @@ def check():
     print("Keyword, review history, and both review rounds passed with one T3 thread per PR.")
 
 
+def check_activity():
+    head = "a" * 40
+    viewer = {"login": "reviewer"}
+    contributor = {"login": "contributor"}
+    url = "https://github.com/example/repo/pull/42"
+
+    def comment(id, author, message, created="2026-01-02T09:00:00Z"):
+        return {"url": f"{url}#discussion_r{id}", "author": author, "bodyText": message, "createdAt": created}
+
+    def thread(root, replies=(), *, resolved=False, outdated=False):
+        return {"path": "example.py", "isResolved": resolved, "isOutdated": outdated,
+                "first": {"nodes": [root]}, "recent": {"nodes": [root, *replies]}}
+
+    threads = [thread(comment(1, viewer, "Return the empty result"), [comment(2, contributor, "Updated this")]),
+               thread(comment(3, viewer, "Resolve this"), resolved=True),
+               thread(comment(4, viewer, "Old line"), outdated=True),
+               thread(comment(5, contributor, "Another inline comment"))]
+    pull = {"title": "Example change", "state": "OPEN", "headRefOid": head, "viewerDidAuthor": False,
+            "reviewDecision": "REVIEW_REQUIRED", "reviews": {"nodes": []},
+            "comments": {"totalCount": 1, "nodes": [comment(6, contributor, "New tests are ready")]},
+            "reviewThreads": {"totalCount": len(threads), "pageInfo": {"hasNextPage": False}, "nodes": []}}
+    posts = []
+
+    def mock_command(*args, **kwargs):
+        if args[4] == "graphql":
+            pull["reviewThreads"].update(totalCount=len(threads), nodes=threads)
+            return json.dumps([{"data": {"viewer": viewer, "repository": {"pullRequest": pull}}}])
+        assert args[4:10] == ("--method", "POST", "repos/example/repo/pulls/42/reviews", "-f", "event=APPROVE", "-f")
+        assert args[10] == f"commit_id={head}"
+        posts.append(args)
+        pull["reviews"]["nodes"].append({"author": viewer, "state": "APPROVED", "commit": {"oid": head}})
+        return json.dumps({"state": "APPROVED", "commit_id": head, "html_url": f"{url}#pullrequestreview-1"})
+
+    with tempfile.TemporaryDirectory() as directory, patch.multiple(review, REPO="example/repo", DATA=Path(directory),
+                                                                     command=mock_command):
+        review.save_record("42", {"status": "completed", "reviewed_head": head, "rounds": [
+            {"id": "saved", "kind": "review", "status": "completed", "head": head,
+             "started": "2026-01-03T09:00:00+00:00", "findings": "No new findings."},
+        ]})
+
+        def view(action="activity", token=""):
+            result = review.main(action, "42", "42:saved", token)
+            return result["update"]["ids"], result["variables"]
+
+        fields, variables = view()
+        report = fields["findings"]["text"]
+        assert "1 open · 1 resolved · 1 outdated" in report and "Updated this" in report
+        assert "New tests are ready" in report and "Another inline comment" in report
+        assert "No inline findings posted by you" in report and fields["approve"]["enabled"]
+        token = variables["approval_token"]
+        assert token == f"reviewer:{head}" and not posts
+
+        pull["headRefOid"] = "b" * 40
+        fields, _ = view("approve", token)
+        assert "New commits since review" in fields["findings"]["text"] and not fields["approve"]["enabled"]
+        pull["headRefOid"] = head
+        threads.append(thread(comment(7, viewer, "New finding", "2026-01-03T09:00:01Z")))
+        fields, _ = view("approve", token)
+        assert "1 inline finding posted" in fields["findings"]["text"] and not fields["approve"]["enabled"]
+        threads.pop()
+        pull["viewerDidAuthor"] = True
+        assert not view("approve", token)[0]["approve"]["enabled"]
+        pull["viewerDidAuthor"] = False
+        assert not view("approve", f"other:{head}")[0]["approve"]["enabled"]
+        assert not view("approve")[0]["approve"]["enabled"] and not posts
+
+        fields, _ = view("approve", token)
+        assert "Approved on GitHub" in fields["findings"]["text"] and not fields["approve"]["enabled"]
+        assert not view("approve", token)[0]["approve"]["enabled"] and len(posts) == 1
+        threads.clear()
+        pull["comments"] = {"totalCount": 0, "nodes": []}
+        assert "No inline or discussion comments on this PR" in view()[0]["findings"]["text"]
+        pull["reviewThreads"]["pageInfo"]["hasNextPage"] = True
+        assert "GitHub activity unavailable" in view()[0]["findings"]["text"]
+        assert not view("approve", token)[0]["approve"]["enabled"] and len(posts) == 1
+    print("Activity and approval passed. Changed commits, posted findings and duplicate approval were blocked.")
+
+
 if __name__ == "__main__":
     check()
+    check_activity()
