@@ -1,0 +1,330 @@
+{
+  "bundleid": "local.harshal.trellis-pr-review.panel",
+  "variables": {
+    "selected_pr": "",
+    "thread_url": "",
+    "report": "",
+    "review_action": [
+      {
+        "type": "json",
+        "src": {
+          "pulse": {
+            "interval": 0
+          },
+          "update": {
+            "ids": {
+              "pr": {
+                "enabled": false
+              },
+              "review": {
+                "enabled": false
+              },
+              "rereview": {
+                "enabled": false
+              },
+              "status": {
+                "text": "Preparing review…"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "script",
+        "src": "review.py",
+        "args": [
+          "review",
+          "{value:pr.text}"
+        ],
+        "async": true
+      }
+    ],
+    "rereview_action": [
+      {
+        "type": "json",
+        "src": {
+          "pulse": {
+            "interval": 0
+          },
+          "update": {
+            "ids": {
+              "pr": {
+                "enabled": false
+              },
+              "review": {
+                "enabled": false
+              },
+              "rereview": {
+                "enabled": false
+              },
+              "status": {
+                "text": "Preparing review…"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "script",
+        "src": "review.py",
+        "args": [
+          "rereview",
+          "{value:pr.text}"
+        ],
+        "async": true
+      }
+    ]
+  },
+  "pulse": {
+    "interval": 0,
+    "intervalmode": "delay",
+    "src": "review.py",
+    "args": [
+      "poll",
+      "{var:selected_pr}"
+    ]
+  },
+  "window": {
+    "title": "PR Review",
+    "size": {
+      "width": 680,
+      "height": 470
+    },
+    "root": {
+      "type": "view",
+      "layout": "border",
+      "padding": 16,
+      "spacing": 12,
+      "events": [
+        {
+          "triggers": "preload",
+          "action": {
+            "type": "script",
+            "src": "review.py",
+            "args": [
+              "init",
+              "{var:review_selection}"
+            ]
+          }
+        },
+        {
+          "triggers": "launched",
+          "action": {
+            "type": "script",
+            "src": "review.py",
+            "args": [
+              "auto",
+              "{var:review_selection}"
+            ],
+            "async": true
+          }
+        }
+      ],
+      "components": [
+        {
+          "type": "view",
+          "layout": "inline",
+          "direction": "vertical",
+          "padding": 0,
+          "spacing": 8,
+          "constraints": {
+            "region": "top"
+          },
+          "components": [
+            {
+              "type": "label",
+              "text": "PR Review",
+              "font": {
+                "size": 20,
+                "weight": "semibold"
+              }
+            },
+            {
+              "type": "textfield",
+              "id": "pr",
+              "placeholder": "PR number or GitHub URL",
+              "focus": true,
+              "constraints": {
+                "stretch": "horizontal"
+              },
+              "events": [
+                {
+                  "triggers": "typingstopped",
+                  "action": {
+                    "type": "script",
+                    "src": "review.py",
+                    "args": [
+                      "select",
+                      "{value:pr.text}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "type": "view",
+              "layout": "inline",
+              "direction": "horizontal",
+              "padding": 0,
+              "spacing": 8,
+              "constraints": {
+                "region": "top"
+              },
+              "components": [
+                {
+                  "type": "button",
+                  "id": "review",
+                  "text": "Review",
+                  "shortcut": "⌘↩",
+                  "tooltip": "Review and post important findings · ⌘↩",
+                  "enabled": false,
+                  "events": [
+                    {
+                      "triggers": "actioned",
+                      "action": "{var:review_action}"
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "rereview",
+                  "text": "Re-review",
+                  "shortcut": "⌘⇧↩",
+                  "tooltip": "Re-review in the same thread · ⌘⇧↩",
+                  "enabled": false,
+                  "events": [
+                    {
+                      "triggers": "actioned",
+                      "action": "{var:rereview_action}"
+                    }
+                  ]
+                },
+                {
+                  "type": "label",
+                  "text": "Codex · GPT-6.2 Sol · High",
+                  "colour": "secondaryLabelColor",
+                  "font": {
+                    "size": 11
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "markdownarea",
+          "id": "findings",
+          "constraints": {
+            "region": "centre"
+          },
+          "background": null,
+          "autoadjustcontentinsets": false,
+          "behaviour": {
+            "mode": "replace",
+            "scroll": "start"
+          }
+        },
+        {
+          "type": "view",
+          "layout": "border",
+          "spacing": 8,
+          "constraints": {
+            "region": "bottom"
+          },
+          "components": [
+            {
+              "type": "label",
+              "id": "status",
+              "text": "",
+              "colour": "secondaryLabelColor",
+              "font": {
+                "size": 12
+              },
+              "constraints": {
+                "region": "centre"
+              }
+            },
+            {
+              "type": "view",
+              "layout": "inline",
+              "direction": "horizontal",
+              "padding": 0,
+              "spacing": 8,
+              "constraints": {
+                "region": "right"
+              },
+              "components": [
+                {
+                  "type": "button",
+                  "id": "copy",
+                  "text": "Copy",
+                  "shortcut": "⌘⇧C",
+                  "tooltip": "Copy findings · ⌘⇧C",
+                  "enabled": false,
+                  "events": [
+                    {
+                      "triggers": "actioned",
+                      "action": {
+                        "type": "json",
+                        "src": {
+                          "copy": {
+                            "type": "text",
+                            "src": "{var:report}"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "open",
+                  "text": "Open in T3",
+                  "shortcut": "⌘O",
+                  "tooltip": "Open the review thread · ⌘O",
+                  "enabled": false,
+                  "events": [
+                    {
+                      "triggers": "actioned",
+                      "action": {
+                        "type": "json",
+                        "src": {
+                          "open": {
+                            "type": "url",
+                            "src": "{var:thread_url}"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "variablesconfig": {
+    "review_selection": {
+      "src": "variable",
+      "default": "",
+      "scriptenv": false
+    },
+    "review_repository": {
+      "src": "variable",
+      "default": "",
+      "scriptenv": true
+    },
+    "review_project": {
+      "src": "variable",
+      "default": "",
+      "scriptenv": true
+    },
+    "review_documents": {
+      "src": "variable",
+      "default": "",
+      "scriptenv": true
+    }
+  }
+}

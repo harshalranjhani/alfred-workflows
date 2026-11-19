@@ -1,0 +1,5 @@
+Use the /mattpocock-skills:code-review skill for this PR review. Read its SKILL.md if the slash command is unavailable. Review both standards and spec against the pinned PR base commit. Check the code around the diff, including relevant callers, tests, and existing behavior.
+
+Read any reference documents listed below. Use the relevant sections and the PR's originating issue to establish the intended behavior. For DOCX files, use macOS `textutil -convert txt -stdout` if needed. Verify each potential finding yourself against the actual code and spec before posting. Drop any finding you cannot substantiate.
+
+Post inline GitHub comments on my behalf only for important, actionable findings you can substantiate. Check existing PR reviews and inline comments first and skip anything already covered. Keep each comment focused on the concrete impact and the change needed. If there are no such findings, leave the PR alone. Finish with a concise Markdown report of the findings and comment links, or say that there were no important findings.
